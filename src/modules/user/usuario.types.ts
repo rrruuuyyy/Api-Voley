@@ -1,10 +1,8 @@
 export enum UserRolesEnum {
     ADMINISTRADOR = 'administrador',
-    GERENTE = 'gerente',
-    CAJERO_JEFE = 'cajero_jefe',
-    CAJERO = 'cajero',
-    REPARTIDOR = 'repartidor',
-    ALMACENISTA = 'almacenista',
+    ADMIN_LIGA = 'admin_liga',
+    CAPITAN = 'capitan',
+    JUGADOR = 'jugador',
 }
 
 export enum UsuarioActionsEnum {

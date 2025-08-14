@@ -18,6 +18,9 @@ export class Usuario {
     @Column({ type:'varchar', length:'6', nullable: true })
     code:string
 
+    @Column({ type:'varchar', length:'20', unique: true })
+    qrCode: string
+
     @Column({ type:'enum', enum:UserRolesEnum })
     rol: UserRolesEnum;
 

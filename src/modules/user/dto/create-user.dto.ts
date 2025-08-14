@@ -18,8 +18,4 @@ export class CreateUserDto {
   @IsNotEmpty()
   @IsEnum(UserRolesEnum)
   rol: UserRolesEnum;
-
-  @IsOptional()
-  @IsNumber()
-  sucursalId?: number;
 }

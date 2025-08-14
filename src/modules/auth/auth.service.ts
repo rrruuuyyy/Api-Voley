@@ -44,39 +44,35 @@ export class AuthService {
     if (!isValid) throw new HttpException('PASSWORD_INVALID', HttpStatus.BAD_REQUEST);
     const payload = { name: userFound.nombre, id: userFound.id };
     const data = {
-      access_token: this.jwtService.sign(payload)
+      access_token: this.jwtService.sign(payload),
+      user: {}
     };
     return { ...data };
   }
 
-  async loginSucursal(loginAuthDto:LoginSucursalDto){
-    const { code } = loginAuthDto
-    const userFound = await this.usersRepository.createQueryBuilder('user')
-    .where('user.code = :code', { code }).getOne()
-    if (!userFound) throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
-    if (!userFound.active) throw new HttpException('Usuario inactivo', HttpStatus.FORBIDDEN);
-    const payload = { name: userFound.nombre, id: userFound.id };
-    const data = {
-      access_token: this.jwtService.sign(payload, { expiresIn: '3600d' })
-    };
-    return { ...data, user:payload };
-  }
-
   async register(registerAuthDto: RegisterAuthDto) {
     const password = await generateHash(registerAuthDto.u_password)
+    const qrCode = nanoid(12) // Generamos un ID único para el QR
     const payloadUser:Partial<Usuario> = {
       nombre: registerAuthDto.u_name,
       correo: registerAuthDto.u_email,
       password,
       active: true,
-      rol: UserRolesEnum.ADMINISTRADOR
+      rol: UserRolesEnum.ADMINISTRADOR,
+      qrCode
     }
     let createdItem = await this.usersRepository.create(payloadUser);
     await this.usersRepository.save(createdItem)
     const payload = { nombre: createdItem.nombre, id: createdItem.id, rol: createdItem.rol, correo: createdItem.correo };
-    const data = {
+    const data: { access_token, user:UserRequest } = {
       access_token: this.jwtService.sign(payload),
-      user: createdItem,
+      user: {
+        id: createdItem.id,
+        nombre: createdItem.nombre,
+        correo: createdItem.correo,
+        rol: createdItem.rol,
+        qrCode: createdItem.qrCode
+      },
     };
     return { ...data };
   }

@@ -6,6 +6,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsuarioModule } from './modules/user/usuario.module';
+import { SedeModule } from './modules/sede/sede.module';
+import { LigaModule } from './modules/liga/liga.module';
+import { EquipoModule } from './modules/equipo/equipo.module';
+import { PartidoModule } from './modules/partido/partido.module';
+import { DatabaseSeeder } from './database/database.seeder';
+import { Usuario } from './modules/user/entities/usuario.entity';
 
 @Module({
   imports: [
@@ -24,10 +30,15 @@ import { UsuarioModule } from './modules/user/usuario.module';
         synchronize: true, // Cambia a false en producción
       }),
     }),
+    TypeOrmModule.forFeature([Usuario]),
     AuthModule,
     UsuarioModule,
+    SedeModule,
+    LigaModule,
+    EquipoModule,
+    PartidoModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, DatabaseSeeder],
 })
 export class AppModule {}

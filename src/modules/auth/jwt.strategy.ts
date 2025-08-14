@@ -28,13 +28,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any):Promise<Partial<UserRequest>>{
+    console.log('Payload JWT', payload)
     const user = await this.foundUser(payload.id)
+    console.log('User Validate', user)
     if( !user ) throw new HttpException('Forbidden', HttpStatus.FORBIDDEN)
     if( !user.active ) throw new HttpException('Forbidden-Reset', HttpStatus.FORBIDDEN)
     return {
       id: user.id,
       nombre: user.nombre,
       correo: user.correo,
+      rol: user.rol,
+      qrCode: user.qrCode,
     };
   }
 }
