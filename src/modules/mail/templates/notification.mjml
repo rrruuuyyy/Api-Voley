@@ -1,0 +1,58 @@
+<mjml>
+  <mj-head>
+    <mj-title>{{asunto}} - VoleyApp</mj-title>
+    <mj-preview>{{preview}}</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Arial, sans-serif" />
+      <mj-button background-color="#007bff" color="white" font-size="16px" border-radius="4px" />
+      <mj-text font-size="16px" color="#333333" line-height="1.6" />
+    </mj-attributes>
+    <mj-style inline="inline">
+      .header-text { color: #007bff !important; }
+      .footer-text { color: #666666 !important; font-size: 12px !important; }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#f4f4f4">
+    <!-- Header -->
+    <mj-section background-color="#ffffff" padding="40px 20px 20px 20px">
+      <mj-column>
+        <mj-text align="center" font-size="28px" font-weight="bold" css-class="header-text">
+          VoleyApp
+        </mj-text>
+        <mj-divider border-color="#007bff" border-width="2px" width="100px" />
+      </mj-column>
+    </mj-section>
+
+    <!-- Content -->
+    <mj-section background-color="#ffffff" padding="20px">
+      <mj-column>
+        {{#if nombre}}
+        <mj-text>
+          Hola {{nombre}},
+        </mj-text>
+        {{/if}}
+        <mj-text>
+          {{{contenido}}}
+        </mj-text>
+        {{#if accionUrl}}
+        <mj-button href="{{accionUrl}}" background-color="#007bff" color="white" font-size="16px" font-weight="bold" border-radius="4px" padding="12px 30px">
+          {{accionTexto}}
+        </mj-button>
+        {{/if}}
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section background-color="#f8f9fa" padding="30px 20px">
+      <mj-column>
+        <mj-text align="center" css-class="footer-text">
+          Este correo fue enviado por Grupo Daytona<br/>
+          {{#if configuracion}}{{configuracion}}{{/if}}
+        </mj-text>
+        <mj-text align="center" css-class="footer-text" padding-top="10px">
+          © {{year}} Grupo Daytona. Todos los derechos reservados.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

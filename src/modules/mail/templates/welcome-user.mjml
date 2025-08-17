@@ -1,0 +1,116 @@
+<mjml>
+  <mj-head>
+    <mj-title>Bienvenido a VoleyApp</mj-title>
+    <mj-preview>Tus credenciales de acceso han sido creadas</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Arial, sans-serif" />
+      <mj-button background-color="#007bff" color="white" font-size="16px" border-radius="4px" />
+      <mj-text font-size="16px" color="#333333" line-height="1.6" />
+    </mj-attributes>
+    <mj-style inline="inline">
+      .header-text { color: #007bff !important; }
+      .footer-text { color: #666666 !important; font-size: 12px !important; }
+      .credentials-box { 
+        background-color: #f8f9fa !important; 
+        border: 1px solid #dee2e6 !important; 
+        border-radius: 4px !important; 
+        padding: 20px !important; 
+        margin: 20px 0 !important; 
+      }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#f4f4f4">
+    <!-- Header -->
+    <mj-section background-color="#ffffff" padding="40px 20px 20px 20px">
+      <mj-column>
+        <mj-text align="center" font-size="28px" font-weight="bold" css-class="header-text">
+          VoleyApp
+        </mj-text>
+        <mj-divider border-color="#007bff" border-width="2px" width="100px" />
+      </mj-column>
+    </mj-section>
+
+    <!-- Welcome Message -->
+    <mj-section background-color="#ffffff" padding="20px">
+      <mj-column>
+        <mj-text font-size="24px" font-weight="bold" color="#333333" align="center">
+          ¡Bienvenido {{nombre}}!
+        </mj-text>
+        <mj-text>
+          Tu cuenta en VoleyApp ha sido creada exitosamente. A continuación encontrarás tus credenciales de acceso para ingresar al portal.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Credentials Box -->
+    <mj-section background-color="#ffffff" padding="0 20px">
+      <mj-column>
+        <mj-table>
+          <tr style="border: 1px solid #dee2e6; background-color: #f8f9fa;">
+            <td style="padding: 20px; border-radius: 4px;">
+              <h3 style="margin: 0 0 15px 0; color: #333; font-size: 18px;">Tus credenciales de acceso:</h3>
+              <p style="margin: 8px 0; font-size: 16px;">
+                <strong>Correo electrónico:</strong> {{correo}}
+              </p>
+              <p style="margin: 8px 0; font-size: 16px;">
+                <strong>Contraseña temporal:</strong> {{password}}
+              </p>
+              {{#if qrCode}}
+              <p style="margin: 8px 0; font-size: 16px;">
+                <strong>Código QR:</strong> {{qrCode}}
+              </p>
+              {{/if}}
+            </td>
+          </tr>
+        </mj-table>
+      </mj-column>
+    </mj-section>
+
+    <!-- Security Notice -->
+    <mj-section background-color="#ffffff" padding="20px">
+      <mj-column>
+        <mj-text color="#dc3545" font-size="14px">
+          <strong>Importante:</strong> Por tu seguridad, te recomendamos cambiar tu contraseña la primera vez que ingreses al sistema.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Action Button -->
+    <mj-section background-color="#ffffff" padding="20px">
+      <mj-column>
+        <mj-button href="{{loginUrl}}" background-color="#007bff" color="white" font-size="16px" font-weight="bold" border-radius="4px" padding="12px 30px">
+          Ingresar al Portal
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <!-- Features Section -->
+    <mj-section background-color="#ffffff" padding="20px">
+      <mj-column>
+        <mj-text font-size="18px" font-weight="bold" color="#333333">
+          Con VoleyApp podrás:
+        </mj-text>
+        <mj-text>
+          • Participar en ligas y torneos<br/>
+          • Ver resultados y estadísticas<br/>
+          • Gestionar tu equipo<br/>
+          • Comunicarte con otros jugadores<br/>
+          • Recibir notificaciones importantes
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section background-color="#f8f9fa" padding="30px 20px">
+      <mj-column>
+        <mj-text align="center" css-class="footer-text">
+          Este correo fue enviado por Grupo Daytona<br/>
+          Si tienes problemas para acceder, contacta al administrador del sistema.
+        </mj-text>
+        <mj-text align="center" css-class="footer-text" padding-top="10px">
+          © {{year}} Grupo Daytona. Todos los derechos reservados.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

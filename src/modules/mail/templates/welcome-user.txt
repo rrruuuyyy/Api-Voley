@@ -1,0 +1,22 @@
+¡Bienvenido {{nombre}} a VoleyApp!
+
+Tu cuenta ha sido creada exitosamente. Aquí están tus credenciales de acceso:
+
+Correo electrónico: {{correo}}
+Contraseña temporal: {{password}}
+{{#if qrCode}}Código QR: {{qrCode}}{{/if}}
+
+Para ingresar al portal, visita: {{loginUrl}}
+
+Por tu seguridad, te recomendamos cambiar tu contraseña la primera vez que ingreses al sistema.
+
+Con VoleyApp podrás:
+• Participar en ligas y torneos
+• Ver resultados y estadísticas
+• Gestionar tu equipo
+• Comunicarte con otros jugadores
+• Recibir notificaciones importantes
+
+Si tienes problemas para acceder, contacta al administrador del sistema.
+
+© {{year}} Grupo Daytona. Todos los derechos reservados.

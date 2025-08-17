@@ -12,13 +12,14 @@ import { paginate } from 'src/core/paginate/paginate';
 import * as bcrypt from 'bcryptjs';
 import { UsuarioActionsEnum, UserRolesEnum } from './usuario.types';
 import { nanoid } from 'nanoid';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class UsuarioService {
   constructor(
     @InjectRepository(Usuario)
     private readonly usuarioRepository: Repository<Usuario>,
-
+    private readonly mailService: MailService,
   ) {}
 
   private removePassword(usuario: Usuario): Omit<Usuario, 'password'> {
@@ -83,6 +84,20 @@ export class UsuarioService {
     });
     
     const savedUsuario = await this.usuarioRepository.save(usuario);
+    
+    // Enviar correo de bienvenida
+    try {
+      await this.mailService.sendWelcomeEmail(savedUsuario.correo, {
+        nombre: savedUsuario.nombre,
+        correo: savedUsuario.correo,
+        password: createUserDto.password, // Enviamos la contraseña original antes del hash
+        qrCode: savedUsuario.qrCode
+      });
+    } catch (error) {
+      // Log del error pero no fallar la creación del usuario
+      console.error('Error enviando correo de bienvenida:', error);
+    }
+    
     return this.removePassword(savedUsuario);
   } 
 
@@ -197,6 +212,20 @@ export class UsuarioService {
     });
 
     const savedUsuario = await this.usuarioRepository.save(usuario);
+    
+    // Enviar correo de bienvenida
+    try {
+      await this.mailService.sendWelcomeEmail(savedUsuario.correo, {
+        nombre: savedUsuario.nombre,
+        correo: savedUsuario.correo,
+        password: createJugadorDto.password, // Enviamos la contraseña original antes del hash
+        qrCode: savedUsuario.qrCode
+      });
+    } catch (error) {
+      // Log del error pero no fallar la creación del usuario
+      console.error('Error enviando correo de bienvenida:', error);
+    }
+    
     return this.removePassword(savedUsuario);
   }
 

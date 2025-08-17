@@ -1,0 +1,13 @@
+{{asunto}} - VoleyApp
+
+{{#if nombre}}Hola {{nombre}},{{/if}}
+
+{{contenido}}
+
+{{#if accionUrl}}
+Para más información, visita: {{accionUrl}}
+{{/if}}
+
+{{#if configuracion}}{{configuracion}}{{/if}}
+
+© {{year}} Grupo Daytona. Todos los derechos reservados.

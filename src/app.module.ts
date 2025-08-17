@@ -10,6 +10,7 @@ import { SedeModule } from './modules/sede/sede.module';
 import { LigaModule } from './modules/liga/liga.module';
 import { EquipoModule } from './modules/equipo/equipo.module';
 import { PartidoModule } from './modules/partido/partido.module';
+import { MailModule } from './modules/mail/mail.module';
 import { DatabaseSeeder } from './database/database.seeder';
 import { Usuario } from './modules/user/entities/usuario.entity';
 
@@ -37,6 +38,7 @@ import { Usuario } from './modules/user/entities/usuario.entity';
     LigaModule,
     EquipoModule,
     PartidoModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeeder],
