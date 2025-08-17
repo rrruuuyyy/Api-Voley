@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { CreateSedeDto } from './dto/create-sede.dto';
 import { UpdateSedeDto } from './dto/update-sede.dto';
 import { Sede } from './entities/sede.entity';
+import { PageOptionsDto } from 'src/core/interfaces/pageOptions.dto';
+import { paginate } from 'src/core/paginate/paginate';
 
 @Injectable()
 export class SedeService {
@@ -17,11 +19,13 @@ export class SedeService {
     return await this.sedeRepository.save(sede);
   }
 
-  async findAll() {
-    return await this.sedeRepository.find({
-      where: { active: true },
-      order: { createdAt: 'DESC' }
-    });
+  async findAll(pageOptionsDto: PageOptionsDto) {
+    const query = this.sedeRepository
+      .createQueryBuilder('sede')
+      .where('sede.active = :active', { active: true })
+      .orderBy('sede.createdAt', 'DESC');
+    
+    return await paginate(query, pageOptionsDto);
   }
 
   async findOne(id: number) {

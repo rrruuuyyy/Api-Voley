@@ -47,6 +47,22 @@ export class Liga {
     @Column({ type: 'boolean', default: true })
     active: boolean;
 
+    // Campos calculados del sistema round-robin
+    @Column({ type: 'int', nullable: true })
+    numeroEquipos: number; // Se calcula automáticamente
+
+    @Column({ type: 'int', nullable: true })
+    partidosPorEquipo: number; // (n-1) * k
+
+    @Column({ type: 'int', nullable: true })
+    partidosTotales: number; // n * (n-1) / 2 * k
+
+    @Column({ type: 'int', nullable: true })
+    totalJornadas: number; // k * (n-1) si n es par, k * n si n es impar
+
+    @Column({ type: 'int', nullable: true })
+    partidosPorJornada: number; // n/2 si n es par, (n-1)/2 si n es impar
+
     // Relaciones
     @ManyToOne(() => Usuario, { eager: true })
     @JoinColumn({ name: 'adminLigaId' })

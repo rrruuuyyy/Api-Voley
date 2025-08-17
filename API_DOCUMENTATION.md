@@ -149,17 +149,104 @@ Crea una nueva liga (ADMIN_LIGA)
 - `criteriosDesempate`: Array ordenado de criterios de desempate
 - `vueltas`: Número de veces que se enfrentan los equipos
 
+#### POST `/liga/{id}/capitanes`
+Asigna capitanes a una liga (ADMIN_LIGA)
+```json
+{
+  "capitanesIds": [3, 5, 7, 9]
+}
+```
+**Requisitos:**
+- Mínimo 2 capitanes
+- Todos los usuarios deben tener rol `CAPITAN`
+- Solo se puede hacer en ligas con estado `programada`
+
+#### GET `/liga/{id}/capitanes`
+Obtiene los capitanes asignados a una liga
+```json
+{
+  "total": 4,
+  "capitanes": [
+    {
+      "id": 3,
+      "nombre": "Juan Pérez",
+      "correo": "juan@example.com",
+      "fechaAsignacion": "2024-03-01T10:00:00Z"
+    }
+  ]
+}
+```
+
 #### PUT `/liga/{id}/iniciar`
 Inicia una liga (cambia status a "en_curso")
+**Funcionalidad automática:**
+- Calcula automáticamente los números de juegos basado en equipos existentes
+- Actualiza campos: `numeroEquipos`, `partidosPorEquipo`, `partidosTotales`, `totalJornadas`, `partidosPorJornada`
+
+#### GET `/liga/{id}/estadisticas`
+Obtiene estadísticas calculadas de la liga
+```json
+{
+  "id": 1,
+  "nombre": "Liga Juvenil 2024",
+  "status": "en_curso",
+  "vueltas": 2,
+  "numeroEquipos": 6,
+  "partidosPorEquipo": 10,
+  "partidosTotales": 30,
+  "totalJornadas": 10,
+  "partidosPorJornada": 3,
+  "calculado": true
+}
+```
+
+#### GET `/liga/{id}/calculos`
+Obtiene funciones de cálculo para estadísticas de la liga (útil para frontend)
 
 #### PUT `/liga/{id}/finalizar`
 Finaliza una liga (cambia status a "finalizada")
 
 #### GET `/liga`
-Lista todas las ligas
+Lista todas las ligas con paginación
+```
+GET /liga?page=1&limit=10&order=ASC&sort=nombre
+```
 
-#### GET `/liga/{id}/estadisticas`
-Obtiene funciones de cálculo para estadísticas de la liga
+**Parámetros de consulta (opcionales):**
+- `page`: Número de página (default: 1)
+- `limit`: Elementos por página (default: 10)
+- `order`: Orden ASC/DESC (default: DESC)
+- `sort`: Campo de ordenamiento (default: createdAt)
+
+**Respuesta:**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "nombre": "Liga Juvenil 2024",
+      "descripcion": "Liga para categoría juvenil",
+      "status": "programada",
+      "vueltas": 2,
+      "numeroEquipos": 6,
+      "partidosTotales": 30,
+      "adminLiga": {...},
+      "sede": {...}
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "itemCount": 1,
+    "pageCount": 1,
+    "hasPreviousPage": false,
+    "hasNextPage": false
+  }
+}
+```
+
+#### GET `/liga/{id}`
+Obtiene detalles de una liga específica
 
 ---
 
@@ -289,17 +376,41 @@ Obtiene tabla de posiciones con estadísticas completas
 ## Flujo de Trabajo Típico
 
 1. **Administrador** crea sedes y asigna roles de `admin_liga`
-2. **Admin Liga** crea liga y asigna `capitanes`
-3. **Capitanes** crean equipos y agregan `jugadores`
-4. **Admin Liga** genera fixture automático: `POST /partido/generate-fixtures/{ligaId}`
-5. **Admin Liga** inicia liga: `PUT /liga/{id}/iniciar`
-6. **Se registran resultados**: `PUT /partido/{id}/resultado`
-7. **Se consulta tabla**: `GET /partido/tabla/{ligaId}`
+2. **Admin Liga** crea liga: `POST /liga`
+3. **Admin Liga** asigna capitanes a la liga: `POST /liga/{id}/capitanes`
+4. **Capitanes** crean equipos y agregan `jugadores`
+5. **Admin Liga** inicia liga (calcula automáticamente números de juegos): `PUT /liga/{id}/iniciar`
+6. **Admin Liga** genera fixture automático: `POST /partido/generate-fixtures/{ligaId}`
+7. **Se registran resultados**: `PUT /partido/{id}/resultado`
+8. **Se consulta tabla**: `GET /partido/tabla/{ligaId}`
+
+## Cálculo Automático de Números de Juegos
+
+Cuando se inicia una liga (`PUT /liga/{id}/iniciar`), el sistema:
+
+1. **Cuenta equipos reales** registrados en la liga
+2. **Calcula automáticamente**:
+   - `numeroEquipos`: Equipos activos en la liga
+   - `partidosPorEquipo`: `(n - 1) × k` donde n = equipos, k = vueltas
+   - `partidosTotales`: `n × (n - 1) / 2 × k`
+   - `totalJornadas`: `k × (n - 1)` si n es par, `k × n` si n es impar
+   - `partidosPorJornada`: `n/2` si n es par, `(n-1)/2` si n es impar
+
+3. **Guarda los valores** en la entidad Liga para consulta posterior
+
+### Ejemplo de Cálculo
+Para una liga con **6 equipos** y **2 vueltas**:
+- Partidos por equipo: `(6-1) × 2 = 10`
+- Partidos totales: `6 × 5 / 2 × 2 = 30`
+- Jornadas totales: `2 × (6-1) = 10`
+- Partidos por jornada: `6/2 = 3`
 
 ## Códigos QR
 
-Cada usuario tiene un código QR único (`qrCode`) de 12 caracteres:
-- Se genera automáticamente al crear jugador
+Cada usuario tiene un código QR único (`qrCode`) de 8 caracteres:
+- **Formato**: 4 letras + 4 números (ej: `ABCD1234`)
+- Se genera automáticamente al crear cualquier usuario
+- Garantiza unicidad en la base de datos
 - Permite login rápido: `POST /auth/login-sucursal`
 - Se puede regenerar: `PUT /usuario/{id}/generate-qr`
 

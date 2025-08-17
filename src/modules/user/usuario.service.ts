@@ -26,6 +26,42 @@ export class UsuarioService {
     return userWithoutPassword;
   }
 
+  private generateQrCode(): string {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numbers = '0123456789';
+    
+    let qrCode = '';
+    
+    // Generar 4 letras aleatorias
+    for (let i = 0; i < 4; i++) {
+      qrCode += letters.charAt(Math.floor(Math.random() * letters.length));
+    }
+    
+    // Generar 4 números aleatorios
+    for (let i = 0; i < 4; i++) {
+      qrCode += numbers.charAt(Math.floor(Math.random() * numbers.length));
+    }
+    
+    return qrCode;
+  }
+
+  private async generateUniqueQrCode(): Promise<string> {
+    let qrCode = '';
+    let exists = true;
+    
+    // Intentar hasta encontrar un código único
+    while (exists) {
+      qrCode = this.generateQrCode();
+      const existingUser = await this.usuarioRepository.findOne({
+        where: { qrCode },
+        select: ['id']
+      });
+      exists = !!existingUser;
+    }
+    
+    return qrCode;
+  }
+
   async create(createUserDto: CreateUserDto, user: UserRequest) {
     const existingByCorreo = await this.usuarioRepository
       .createQueryBuilder('usuario')
@@ -35,14 +71,19 @@ export class UsuarioService {
     if (existingByCorreo) {
       throw new ConflictException('Ya existe un usuario con ese correo electrónico');
     }
+    
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(createUserDto.password, saltRounds);
+    const qrCode = await this.generateUniqueQrCode();
+    
     const usuario = this.usuarioRepository.create({
       ...createUserDto,
       password: hashedPassword,
+      qrCode,
     });
+    
     const savedUsuario = await this.usuarioRepository.save(usuario);
-    return savedUsuario
+    return this.removePassword(savedUsuario);
   } 
 
   async findAll(pageOptionsDto: PageOptionsDto, user: UserRequest) {
@@ -54,6 +95,7 @@ export class UsuarioService {
         'usuario.correo',
         'usuario.rol',
         'usuario.active',
+        'usuario.createdAt',
       ]);
     return await paginate(query, pageOptionsDto);
   }
@@ -145,7 +187,7 @@ export class UsuarioService {
 
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(createJugadorDto.password, saltRounds);
-    const qrCode = nanoid(12);
+    const qrCode = await this.generateUniqueQrCode();
     
     const usuario = this.usuarioRepository.create({
       ...createJugadorDto,
@@ -199,7 +241,7 @@ export class UsuarioService {
 
   async generateNewQrCode(userId: number) {
     const usuario = await this.findOne(userId);
-    usuario.qrCode = nanoid(12);
+    usuario.qrCode = await this.generateUniqueQrCode();
     const updatedUsuario = await this.usuarioRepository.save(usuario);
     return this.removePassword(updatedUsuario);
   }

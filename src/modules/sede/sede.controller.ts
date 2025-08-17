@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { SedeService } from './sede.service';
 import { CreateSedeDto } from './dto/create-sede.dto';
 import { UpdateSedeDto } from './dto/update-sede.dto';
@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRolesEnum } from '../user/usuario.types';
+import { PageOptionsDto } from 'src/core/interfaces/pageOptions.dto';
 
 @Controller('sede')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -19,8 +20,8 @@ export class SedeController {
   }
 
   @Get()
-  findAll() {
-    return this.sedeService.findAll();
+  findAll(@Query() pageOptionsDto: PageOptionsDto) {
+    return this.sedeService.findAll(pageOptionsDto);
   }
 
   @Get(':id')
