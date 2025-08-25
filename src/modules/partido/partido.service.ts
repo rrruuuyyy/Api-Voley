@@ -635,19 +635,24 @@ export class PartidoService {
       throw new HttpException('Un equipo no puede jugar contra sí mismo', HttpStatus.BAD_REQUEST);
     }
 
+    // AUTO-DETECTAR VUELTA CORRECTA si no se especificó
+    if (!partidoDto.vuelta) {
+      partidoDto.vuelta = await this.detectarVueltaCorrecta(ligaId, partidoDto.equipoLocalId, partidoDto.equipoVisitanteId);
+    }
+
     // Verificar que no exista ya este enfrentamiento en la misma vuelta
     const partidoExistente = await this.partidoRepository.findOne({
       where: [
         {
           equipoLocal: { id: partidoDto.equipoLocalId },
           equipoVisitante: { id: partidoDto.equipoVisitanteId },
-          vuelta: partidoDto.vuelta || 1,
+          vuelta: partidoDto.vuelta,
           liga: { id: ligaId }
         },
         {
           equipoLocal: { id: partidoDto.equipoVisitanteId },
           equipoVisitante: { id: partidoDto.equipoLocalId },
-          vuelta: partidoDto.vuelta || 1,
+          vuelta: partidoDto.vuelta,
           liga: { id: ligaId }
         }
       ]
@@ -655,7 +660,7 @@ export class PartidoService {
 
     if (partidoExistente) {
       throw new HttpException(
-        `El enfrentamiento entre ${equipoLocal.nombre} y ${equipoVisitante.nombre} ya existe en la vuelta ${partidoDto.vuelta || 1}`,
+        `El enfrentamiento entre ${equipoLocal.nombre} y ${equipoVisitante.nombre} ya existe en la vuelta ${partidoDto.vuelta}`,
         HttpStatus.CONFLICT
       );
     }
@@ -1026,5 +1031,108 @@ export class PartidoService {
     if (completados === 0) return 'no_iniciada';
     if (completados === totales) return 'completada';
     return 'en_curso';
+  }
+
+  private async detectarVueltaCorrecta(ligaId: number, equipoLocalId: number, equipoVisitanteId: number): Promise<number> {
+    const liga = await this.ligaRepository.findOne({
+      where: { id: ligaId, active: true }
+    });
+
+    if (!liga) {
+      throw new HttpException('Liga no encontrada', HttpStatus.NOT_FOUND);
+    }
+
+    // Buscar si este enfrentamiento ya existe en alguna vuelta
+    for (let vuelta = 1; vuelta <= liga.vueltas; vuelta++) {
+      const partidoExistente = await this.partidoRepository.findOne({
+        where: [
+          {
+            equipoLocal: { id: equipoLocalId },
+            equipoVisitante: { id: equipoVisitanteId },
+            vuelta,
+            liga: { id: ligaId }
+          },
+          {
+            equipoLocal: { id: equipoVisitanteId },
+            equipoVisitante: { id: equipoLocalId },
+            vuelta,
+            liga: { id: ligaId }
+          }
+        ]
+      });
+
+      // Si no existe en esta vuelta, es la vuelta correcta
+      if (!partidoExistente) {
+        return vuelta;
+      }
+    }
+
+    // Si ya jugaron en todas las vueltas, error
+    throw new HttpException(
+      `Los equipos ya se han enfrentado en todas las vueltas disponibles (${liga.vueltas})`,
+      HttpStatus.CONFLICT
+    );
+  }
+
+  async getEstadoVueltasLiga(ligaId: number) {
+    const liga = await this.ligaRepository.findOne({
+      where: { id: ligaId, active: true }
+    });
+
+    if (!liga) {
+      throw new HttpException('Liga no encontrada', HttpStatus.NOT_FOUND);
+    }
+
+    const vueltas: any[] = [];
+    for (let vuelta = 1; vuelta <= liga.vueltas; vuelta++) {
+      const partidosVuelta = await this.partidoRepository.find({
+        where: { liga: { id: ligaId }, vuelta }
+      });
+
+      const completados = partidosVuelta.filter(p => p.status === PartidoStatusEnum.FINALIZADO).length;
+      const pendientes = partidosVuelta.filter(p => p.status === PartidoStatusEnum.PROGRAMADO).length;
+
+      const porcentaje = partidosVuelta.length > 0 ? (completados / partidosVuelta.length) * 100 : 0;
+      
+      vueltas.push({
+        numero: vuelta,
+        totalPartidos: partidosVuelta.length,
+        completados,
+        pendientes,
+        porcentajeCompletado: porcentaje,
+        estado: this.determinarEstadoVuelta(completados, partidosVuelta.length),
+        puedeCrearJornada: pendientes > 0 || completados === 0
+      });
+    }
+
+    // Determinar vuelta actual (última con partidos o primera sin partidos)
+    let vueltaActual = 1;
+    for (const vuelta of vueltas) {
+      if (vuelta.estado === 'en_curso') {
+        vueltaActual = vuelta.numero;
+        break;
+      } else if (vuelta.estado === 'no_iniciada') {
+        vueltaActual = vuelta.numero;
+        break;
+      } else if (vuelta.estado === 'completada') {
+        vueltaActual = vuelta.numero + 1 <= liga.vueltas ? vuelta.numero + 1 : vuelta.numero;
+      }
+    }
+
+    return {
+      liga: {
+        id: liga.id,
+        nombre: liga.nombre,
+        vueltas: liga.vueltas
+      },
+      vueltaActual,
+      vueltas,
+      resumen: {
+        totalVueltas: liga.vueltas,
+        vueltasCompletadas: vueltas.filter(v => v.estado === 'completada').length,
+        vueltasEnCurso: vueltas.filter(v => v.estado === 'en_curso').length,
+        vueltasSinIniciar: vueltas.filter(v => v.estado === 'no_iniciada').length
+      }
+    };
   }
 }

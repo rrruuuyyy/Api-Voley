@@ -93,4 +93,10 @@ export class PartidoController {
   ) {
     return this.partidoService.getJornadasPorLiga(+ligaId, tipo as any, status as any);
   }
+
+  @Get('estado-vueltas/liga/:ligaId')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA)
+  getEstadoVueltas(@Param('ligaId') ligaId: string) {
+    return this.partidoService.getEstadoVueltasLiga(+ligaId);
+  }
 }
