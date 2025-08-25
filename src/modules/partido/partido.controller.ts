@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Query, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Query, Put, Patch, Req } from '@nestjs/common';
 import { PartidoService } from './partido.service';
 import { CreatePartidoDto } from './dto/create-partido.dto';
 import { RegistrarResultadoDto } from './dto/registrar-resultado.dto';
+import { CreateJornadaPersonalizadaDto } from './dto/create-jornada-personalizada.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRolesEnum } from '../user/usuario.types';
+import * as requestInterface from 'src/core/interfaces/request.interface';
 
 @Controller('partido')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -54,5 +56,41 @@ export class PartidoController {
     @Body() resultado: RegistrarResultadoDto
   ) {
     return this.partidoService.registrarResultado(+id, resultado);
+  }
+
+  // ===== ENDPOINTS PARA JORNADAS PERSONALIZADAS =====
+
+  @Post('jornada-personalizada')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA)
+  createJornadaPersonalizada(
+    @Body() createJornadaDto: CreateJornadaPersonalizadaDto,
+    @Req() { user }: requestInterface.ExtendedRequest
+  ) {
+    return this.partidoService.createJornadaPersonalizada(createJornadaDto, user.id);
+  }
+
+  @Patch(':id/resultado')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA, UserRolesEnum.CAPITAN)
+  registrarResultadoPatch(
+    @Param('id') id: string,
+    @Body() resultado: RegistrarResultadoDto
+  ) {
+    return this.partidoService.registrarResultado(+id, resultado);
+  }
+
+  @Get('pendientes/equipo/:equipoId')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA, UserRolesEnum.CAPITAN)
+  getPartidosPendientesPorEquipo(@Param('equipoId') equipoId: string) {
+    return this.partidoService.getPartidosPendientesPorEquipo(+equipoId);
+  }
+
+  @Get('jornadas/liga/:ligaId')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA)
+  getJornadasPorLiga(
+    @Param('ligaId') ligaId: string,
+    @Query('tipo') tipo?: string,
+    @Query('status') status?: string
+  ) {
+    return this.partidoService.getJornadasPorLiga(+ligaId, tipo as any, status as any);
   }
 }

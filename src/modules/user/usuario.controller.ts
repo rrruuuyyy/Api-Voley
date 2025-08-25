@@ -4,6 +4,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateJugadorDto } from './dto/create-jugador.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { CreateUsuarioTemporalDto } from './dto/create-usuario-temporal.dto';
+import { RegistroConQrDto } from './dto/registro-con-qr.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -75,5 +77,29 @@ export class UsuarioController {
   @Put(':id/generate-qr')
   generateNewQrCode(@Param('id') id: string) {
     return this.userService.generateNewQrCode(+id);
+  }
+
+  // === ENDPOINTS PARA USUARIOS TEMPORALES ===
+
+  @Post('temporal')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA)
+  createUsuarioTemporal(@Body() createUsuarioTemporalDto: CreateUsuarioTemporalDto) {
+    return this.userService.createUsuarioTemporal(createUsuarioTemporalDto);
+  }
+
+  @Post('registro-qr')
+  registroConQr(@Body() registroConQrDto: RegistroConQrDto) {
+    return this.userService.registroConQr(registroConQrDto);
+  }
+
+  @Get('qr-info/:qrCode')
+  getUsuarioByQr(@Param('qrCode') qrCode: string) {
+    return this.userService.getUsuarioByQr(qrCode);
+  }
+
+  @Get('temporales')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA)
+  getUsuariosTemporales(@Query() pageOptionsDto: PageOptionsDto) {
+    return this.userService.getUsuariosTemporales(pageOptionsDto);
   }
 }

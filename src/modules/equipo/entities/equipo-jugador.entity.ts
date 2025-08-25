@@ -17,7 +17,7 @@ export class EquipoJugador {
     active: boolean;
 
     // Relaciones
-    @ManyToOne(() => Equipo)
+    @ManyToOne(() => Equipo, { onDelete: 'CASCADE', eager: true })
     @JoinColumn({ name: 'equipoId' })
     equipo: Equipo;
 

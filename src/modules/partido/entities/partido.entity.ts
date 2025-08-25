@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Equipo } from "../../equipo/entities/equipo.entity";
 import { Liga } from "../../liga/entities/liga.entity";
+import { Jornada } from "./jornada.entity";
 import { PartidoStatusEnum } from "../partido.types";
 
 @Entity('partido')
@@ -51,6 +52,10 @@ export class Partido {
     @ManyToOne(() => Liga)
     @JoinColumn({ name: 'ligaId' })
     liga: Liga;
+
+    @ManyToOne(() => Jornada, { nullable: true })
+    @JoinColumn({ name: 'jornadaPersonalizadaId' })
+    jornadaPersonalizada: Jornada; // Relación con jornada personalizada
 
     @CreateDateColumn()
     createdAt: Date;

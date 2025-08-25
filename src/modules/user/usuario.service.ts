@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, ConflictException, HttpException, HttpSt
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateJugadorDto } from './dto/create-jugador.dto';
+import { CreateUsuarioTemporalDto } from './dto/create-usuario-temporal.dto';
+import { RegistroConQrDto } from './dto/registro-con-qr.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Usuario } from './entities/usuario.entity';
@@ -273,5 +275,108 @@ export class UsuarioService {
     usuario.qrCode = await this.generateUniqueQrCode();
     const updatedUsuario = await this.usuarioRepository.save(usuario);
     return this.removePassword(updatedUsuario);
+  }
+
+  async createUsuarioTemporal(createUsuarioTemporalDto: CreateUsuarioTemporalDto) {
+    // Verificar que no existe un usuario temporal con el mismo nombre
+    const existingUser = await this.usuarioRepository.findOne({
+      where: { nombre: createUsuarioTemporalDto.nombre, esUsuarioTemporal: true, active: true }
+    });
+
+    if (existingUser) {
+      throw new ConflictException(`Ya existe un usuario temporal con el nombre "${createUsuarioTemporalDto.nombre}"`);
+    }
+
+    // Generar QR único
+    const qrCode = await this.generateUniqueQrCode();
+
+    const usuario = new Usuario();
+    usuario.nombre = createUsuarioTemporalDto.nombre;
+    usuario.rol = createUsuarioTemporalDto.rol;
+    usuario.qrCode = qrCode;
+    usuario.esUsuarioTemporal = true;
+    usuario.active = true;
+
+    const savedUsuario = await this.usuarioRepository.save(usuario);
+    
+    return {
+      message: `Usuario temporal "${savedUsuario.nombre}" creado exitosamente`,
+      usuario: this.removePassword(savedUsuario),
+      qrCode: savedUsuario.qrCode,
+      urlRegistro: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/registro-qr/${savedUsuario.qrCode}`
+    };
+  }
+
+  async registroConQr(registroConQrDto: RegistroConQrDto) {
+    // Buscar usuario temporal por QR
+    const usuario = await this.usuarioRepository.findOne({
+      where: { 
+        qrCode: registroConQrDto.qrCode, 
+        esUsuarioTemporal: true, 
+        active: true 
+      }
+    });
+
+    if (!usuario) {
+      throw new NotFoundException('Código QR no válido o usuario temporal no encontrado');
+    }
+
+    // Verificar que el correo no esté en uso
+    const existingUserWithEmail = await this.usuarioRepository.findOne({
+      where: { correo: registroConQrDto.correo, active: true }
+    });
+
+    if (existingUserWithEmail) {
+      throw new ConflictException('El correo electrónico ya está en uso');
+    }
+
+    // Encriptar contraseña
+    const hashedPassword = await bcrypt.hash(registroConQrDto.password, 10);
+
+    // Actualizar usuario temporal a usuario completo
+    usuario.correo = registroConQrDto.correo;
+    usuario.password = hashedPassword;
+    usuario.esUsuarioTemporal = false;
+
+    const updatedUsuario = await this.usuarioRepository.save(usuario);
+
+    return {
+      message: `¡Registro completado exitosamente! Bienvenido ${updatedUsuario.nombre}`,
+      usuario: this.removePassword(updatedUsuario)
+    };
+  }
+
+  async getUsuarioByQr(qrCode: string) {
+    const usuario = await this.usuarioRepository.findOne({
+      where: { qrCode, active: true }
+    });
+
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado con este código QR');
+    }
+
+    return {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      rol: usuario.rol,
+      esUsuarioTemporal: usuario.esUsuarioTemporal,
+      qrCode: usuario.qrCode,
+      tieneCorreo: !!usuario.correo
+    };
+  }
+
+  async getUsuariosTemporales(pageOptionsDto?: PageOptionsDto) {
+    const query = this.usuarioRepository
+      .createQueryBuilder('usuario')
+      .where('usuario.esUsuarioTemporal = :esUsuarioTemporal', { esUsuarioTemporal: true })
+      .andWhere('usuario.active = :active', { active: true })
+      .orderBy('usuario.createdAt', 'DESC');
+
+    if (pageOptionsDto) {
+      return await paginate(query, pageOptionsDto);
+    } else {
+      const usuarios = await query.getMany();
+      return usuarios.map(u => this.removePassword(u));
+    }
   }
 }

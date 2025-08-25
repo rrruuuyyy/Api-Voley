@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Put, Query, Req } from '@nestjs/common';
 import { LigaService } from './liga.service';
+import { PartidoService } from '../partido/partido.service';
 import { CreateLigaDto } from './dto/create-liga.dto';
 import { UpdateLigaDto } from './dto/update-liga.dto';
 import { AsignarCapitanesDto } from './dto/asignar-capitanes.dto';
@@ -13,7 +14,10 @@ import * as requestInterface from 'src/core/interfaces/request.interface';
 @Controller('liga')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class LigaController {
-  constructor(private readonly ligaService: LigaService) {}
+  constructor(
+    private readonly ligaService: LigaService,
+    private readonly partidoService: PartidoService
+  ) {}
 
   @Post()
   @Roles(UserRolesEnum.ADMIN_LIGA, UserRolesEnum.ADMINISTRADOR)
@@ -25,6 +29,12 @@ export class LigaController {
   @Roles(UserRolesEnum.ADMIN_LIGA, UserRolesEnum.ADMINISTRADOR)
   asignarCapitanes(@Param('id') id: string, @Body() asignarCapitanesDto: AsignarCapitanesDto) {
     return this.ligaService.asignarCapitanes(+id, asignarCapitanesDto);
+  }
+
+  @Delete(':id/capitanes/:capitanId')
+  @Roles(UserRolesEnum.ADMIN_LIGA, UserRolesEnum.ADMINISTRADOR)
+  removerCapitan(@Param('id') id: string, @Param('capitanId') capitanId: string) {
+    return this.ligaService.removerCapitan(+id, +capitanId);
   }
 
   @Get(':id/capitanes')
@@ -68,6 +78,16 @@ export class LigaController {
     return this.ligaService.getEstadisticasLiga(+id);
   }
 
+  @Get(':id/equipos')
+  getEquiposLiga(@Param('id') id: string, @Query('grupo') grupo?: string) {
+    return this.ligaService.getEquiposLiga(+id, grupo ? +grupo : undefined);
+  }
+
+  @Get(':id/equipos/jornadas')
+  getEquiposParaJornadas(@Param('id') id: string) {
+    return this.ligaService.getEquiposParaJornadas(+id);
+  }
+
   @Get(':id/calculos')
   getCalculos(@Param('id') id: string) {
     const ligaId = +id;
@@ -81,5 +101,11 @@ export class LigaController {
       partidosPorJornada: (numeroEquipos: number) => 
         this.ligaService.calcularPartidosPorJornada(numeroEquipos)
     };
+  }
+
+  @Get(':id/estado-general')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA)
+  getEstadoGeneral(@Param('id') id: string) {
+    return this.partidoService.getEstadoGeneralDetallado(+id);
   }
 }

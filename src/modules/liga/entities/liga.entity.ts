@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, ManyToO
 import { Usuario } from "../../user/entities/usuario.entity";
 import { Sede } from "../../sede/entities/sede.entity";
 import { LigaStatusEnum, ScoringSystemEnum, TiebreakCriteriaEnum } from "../liga.types";
+import { Equipo } from "src/modules/equipo/entities/equipo.entity";
 
 @Entity('liga')
 export class Liga {
@@ -77,4 +78,7 @@ export class Liga {
 
     @DeleteDateColumn()
     deletedAt?: Date;
+
+    @OneToMany(() => Equipo, (equipo) => equipo.liga)
+    equipos: Equipo[]
 }

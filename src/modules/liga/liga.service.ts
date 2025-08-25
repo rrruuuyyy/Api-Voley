@@ -9,6 +9,7 @@ import { LigaCapitan } from './entities/liga-capitan.entity';
 import { Usuario } from '../user/entities/usuario.entity';
 import { Sede } from '../sede/entities/sede.entity';
 import { Equipo } from '../equipo/entities/equipo.entity';
+import { EquipoJugador } from '../equipo/entities/equipo-jugador.entity';
 import { UserRolesEnum } from '../user/usuario.types';
 import { LigaStatusEnum } from './liga.types';
 import { PageOptionsDto } from 'src/core/interfaces/pageOptions.dto';
@@ -28,6 +29,8 @@ export class LigaService {
     private sedeRepository: Repository<Sede>,
     @InjectRepository(Equipo)
     private equipoRepository: Repository<Equipo>,
+    @InjectRepository(EquipoJugador)
+    private equipoJugadorRepository: Repository<EquipoJugador>,
   ) {}
 
   async create(createLigaDto: CreateLigaDto, user: UserRequest) {
@@ -72,7 +75,7 @@ export class LigaService {
   async findOne(id: number) {
     const liga = await this.ligaRepository.findOne({
       where: { id, active: true },
-      relations: ['adminLiga', 'sede']
+      relations: ['adminLiga', 'sede', 'equipos']
     });
     
     if (!liga) {
@@ -170,33 +173,79 @@ export class LigaService {
       throw new HttpException('Algunos capitanes no fueron encontrados', HttpStatus.NOT_FOUND);
     }
 
-    // const capitanesInvalidos = capitanes.filter(capitan => capitan.rol !== UserRolesEnum.CAPITAN);
-    // if (capitanesInvalidos.length > 0) {
-    //   throw new HttpException('Todos los usuarios deben tener rol de CAPITAN', HttpStatus.BAD_REQUEST);
-    // }
-    // Eliminar asignaciones anteriores
-    await this.ligaCapitanRepository.update(
-      { liga: { id: ligaId } },
-      { active: false }
-    );
+    // Verificar qué capitanes ya están asignados a esta liga
+    const capitanesYaAsignados = await this.ligaCapitanRepository
+      .createQueryBuilder('ligaCapitan')
+      .leftJoinAndSelect('ligaCapitan.capitan', 'capitan')
+      .where('ligaCapitan.ligaId = :ligaId', { ligaId })
+      .andWhere('ligaCapitan.active = :active', { active: true })
+      .andWhere('capitan.id IN (:...capitanesIds)', { capitanesIds: asignarCapitanesDto.capitanesIds })
+      .getMany();
 
-    // Crear nuevas asignaciones
-    const ligaCapitanes = asignarCapitanesDto.capitanesIds.map(capitanId => {
-      const ligaCapitan = new LigaCapitan();
-      ligaCapitan.liga = liga;
-      const capitan = capitanes.find(c => c.id === capitanId);
-      if (!capitan) {
-        throw new HttpException(`Capitán con ID ${capitanId} no encontrado`, HttpStatus.NOT_FOUND);
+    const idsYaAsignados = capitanesYaAsignados.map(lc => lc.capitan.id);
+    const capitanesNuevos = capitanes.filter(c => !idsYaAsignados.includes(c.id));
+
+    // Verificar si algún capitán nuevo ya tiene un equipo en esta liga
+    if (capitanesNuevos.length > 0) {
+      const capitanesConEquipo = await this.equipoRepository
+        .createQueryBuilder('equipo')
+        .leftJoinAndSelect('equipo.capitan', 'capitan')
+        .where('equipo.ligaId = :ligaId', { ligaId })
+        .andWhere('equipo.capitanId IN (:...capitanesIds)', { capitanesIds: capitanesNuevos.map(c => c.id) })
+        .andWhere('equipo.active = :active', { active: true })
+        .getMany();
+
+      if (capitanesConEquipo.length > 0) {
+        const equiposExistentes = capitanesConEquipo.map(e => 
+          `"${e.capitan.nombre}" ya tiene el equipo "${e.nombre}"`
+        ).join(', ');
+        throw new HttpException(
+          `No se pueden asignar capitanes que ya tienen equipos en esta liga: ${equiposExistentes}`,
+          HttpStatus.BAD_REQUEST
+        );
       }
-      ligaCapitan.capitan = capitan;
-      return ligaCapitan;
+    }
+
+    // Solo crear asignaciones para capitanes nuevos
+    if (capitanesNuevos.length > 0) {
+      const ligaCapitanes = capitanesNuevos.map(capitan => {
+        const ligaCapitan = new LigaCapitan();
+        ligaCapitan.liga = liga;
+        ligaCapitan.capitan = capitan;
+        return ligaCapitan;
+      });
+
+      await this.ligaCapitanRepository.save(ligaCapitanes);
+    }
+
+    // Obtener todos los capitanes actualmente asignados
+    const totalCapitanesAsignados = await this.ligaCapitanRepository.find({
+      where: { liga: { id: ligaId }, active: true },
+      relations: ['capitan']
     });
 
-    await this.ligaCapitanRepository.save(ligaCapitanes);
+    const yaExistian = capitanesYaAsignados.map(lc => lc.capitan.nombre);
+    const nuevosAgregados = capitanesNuevos.map(c => c.nombre);
+
+    let mensaje = '';
+    if (capitanesNuevos.length > 0 && yaExistian.length > 0) {
+      mensaje = `${capitanesNuevos.length} capitanes nuevos asignados. Ya existían: ${yaExistian.join(', ')}`;
+    } else if (capitanesNuevos.length > 0) {
+      mensaje = `${capitanesNuevos.length} capitanes asignados correctamente a la liga`;
+    } else {
+      mensaje = `Todos los capitanes ya estaban asignados a la liga`;
+    }
 
     return {
-      message: `${capitanes.length} capitanes asignados correctamente a la liga`,
-      capitanes: capitanes.map(c => ({ id: c.id, nombre: c.nombre, correo: c.correo }))
+      message: mensaje,
+      totalCapitanes: totalCapitanesAsignados.length,
+      nuevosAsignados: nuevosAgregados,
+      yaExistian: yaExistian,
+      capitanes: totalCapitanesAsignados.map(lc => ({ 
+        id: lc.capitan.id, 
+        nombre: lc.capitan.nombre, 
+        correo: lc.capitan.correo 
+      }))
     };
   }
 
@@ -208,14 +257,86 @@ export class LigaService {
       relations: ['capitan']
     });
 
+    const capitanesConEquipo = await Promise.all(
+      ligaCapitanes.map(async (lc) => {
+        const equipo = await this.equipoRepository.createQueryBuilder('equipo')
+          .where('equipo.ligaId = :ligaId', { ligaId })
+          .andWhere('equipo.capitanId = :capitanId', { capitanId: lc.capitan.id })
+          .getOne();
+
+        return {
+          id: lc.capitan.id,
+          nombre: lc.capitan.nombre,
+          correo: lc.capitan.correo,
+          fechaAsignacion: lc.fechaAsignacion,
+          equipo: equipo
+        };
+      })
+    );
+
     return {
       total: ligaCapitanes.length,
-      capitanes: ligaCapitanes.map(lc => ({
-        id: lc.capitan.id,
-        nombre: lc.capitan.nombre,
-        correo: lc.capitan.correo,
-        fechaAsignacion: lc.fechaAsignacion
-      }))
+      capitanes: capitanesConEquipo
+    };
+  }
+
+  async removerCapitan(ligaId: number, capitanId: number) {
+    const liga = await this.findOne(ligaId);
+    
+    if (liga.status !== LigaStatusEnum.PROGRAMADA) {
+      throw new HttpException('Solo se pueden remover capitanes de una liga programada', HttpStatus.BAD_REQUEST);
+    }
+
+    // Verificar que el capitán esté asignado a la liga
+    const ligaCapitan = await this.ligaCapitanRepository.findOne({
+      where: { 
+        liga: { id: ligaId }, 
+        capitan: { id: capitanId }, 
+        active: true 
+      },
+      relations: ['capitan']
+    });
+
+    if (!ligaCapitan) {
+      throw new HttpException('El capitán no está asignado a esta liga', HttpStatus.NOT_FOUND);
+    }
+
+    // Verificar si el capitán tiene un equipo en la liga
+    const equipo = await this.equipoRepository.findOne({
+      where: { 
+        liga: { id: ligaId }, 
+        capitan: { id: capitanId }, 
+        active: true 
+      },
+      relations: ['capitan']
+    });
+
+    if (equipo) {
+      // Desactivar todos los jugadores del equipo
+      await this.equipoJugadorRepository.update(
+        { equipo: { id: equipo.id }, active: true },
+        { active: false }
+      );
+
+      // Desactivar el equipo
+      equipo.active = false;
+      await this.equipoRepository.save(equipo);
+    }
+
+    // Desactivar la asignación del capitán
+    ligaCapitan.active = false;
+    await this.ligaCapitanRepository.save(ligaCapitan);
+
+    const mensaje = equipo 
+      ? `Capitán "${ligaCapitan.capitan.nombre}" removido de la liga. Su equipo "${equipo.nombre}" y sus jugadores han sido eliminados`
+      : `Capitán "${ligaCapitan.capitan.nombre}" removido de la liga`;
+
+    return {
+      message: mensaje,
+      equipoEliminado: equipo ? {
+        id: equipo.id,
+        nombre: equipo.nombre
+      } : null
     };
   }
 
@@ -300,5 +421,142 @@ export class LigaService {
 
   calcularPartidosPorJornada(numeroEquipos: number): number {
     return numeroEquipos % 2 === 0 ? numeroEquipos / 2 : (numeroEquipos - 1) / 2;
+  }
+
+  // Métodos para obtener equipos de la liga
+  async getEquiposLiga(ligaId: number, grupo?: number) {
+    // Verificar que la liga existe
+    const liga = await this.ligaRepository.findOne({
+      where: { id: ligaId, active: true }
+    });
+
+    if (!liga) {
+      throw new HttpException('Liga no encontrada', HttpStatus.NOT_FOUND);
+    }
+
+    // Construir la condición WHERE
+    const whereCondition: any = {
+      liga: { id: ligaId },
+      active: true
+    };
+
+    // Si se especifica grupo, agregarlo a la condición
+    if (grupo !== undefined) {
+      whereCondition.grupoNumero = grupo;
+    }
+
+    const equipos = await this.equipoRepository.find({
+      where: whereCondition,
+      relations: ['capitan', 'liga'],
+      order: { grupoNumero: 'ASC', nombre: 'ASC' }
+    });
+
+    return {
+      liga: {
+        id: liga.id,
+        nombre: liga.nombre,
+        numeroGrupos: liga.numeroGrupos,
+        status: liga.status
+      },
+      grupo: grupo || null,
+      totalEquipos: equipos.length,
+      equipos: equipos.map(equipo => ({
+        id: equipo.id,
+        nombre: equipo.nombre,
+        grupoNumero: equipo.grupoNumero,
+        color: equipo.color,
+        descripcion: equipo.descripcion,
+        capitan: {
+          id: equipo.capitan.id,
+          nombre: equipo.capitan.nombre,
+          correo: equipo.capitan.correo
+        }
+      }))
+    };
+  }
+
+  async getEquiposParaJornadas(ligaId: number) {
+    // Verificar que la liga existe
+    const liga = await this.ligaRepository.findOne({
+      where: { id: ligaId, active: true }
+    });
+
+    if (!liga) {
+      throw new HttpException('Liga no encontrada', HttpStatus.NOT_FOUND);
+    }
+
+    const equipos = await this.equipoRepository.find({
+      where: { liga: { id: ligaId }, active: true },
+      relations: ['capitan'],
+      order: { grupoNumero: 'ASC', nombre: 'ASC' }
+    });
+
+    // Agrupar equipos por grupo
+    const equiposPorGrupo: { [key: number]: any[] } = {};
+    const equiposSinGrupo: any[] = [];
+
+    equipos.forEach(equipo => {
+      const equipoInfo = {
+        id: equipo.id,
+        nombre: equipo.nombre,
+        grupoNumero: equipo.grupoNumero,
+        color: equipo.color,
+        capitan: {
+          id: equipo.capitan.id,
+          nombre: equipo.capitan.nombre
+        }
+      };
+
+      if (equipo.grupoNumero && equipo.grupoNumero > 0) {
+        if (!equiposPorGrupo[equipo.grupoNumero]) {
+          equiposPorGrupo[equipo.grupoNumero] = [];
+        }
+        equiposPorGrupo[equipo.grupoNumero].push(equipoInfo);
+      } else {
+        equiposSinGrupo.push(equipoInfo);
+      }
+    });
+
+    // Preparar información para generación de jornadas
+    const grupos = Object.keys(equiposPorGrupo).map(grupoNumero => {
+      const equiposGrupo = equiposPorGrupo[+grupoNumero];
+      const numeroEquipos = equiposGrupo.length;
+      
+      return {
+        grupoNumero: +grupoNumero,
+        cantidadEquipos: numeroEquipos,
+        equipos: equiposGrupo,
+        puedeGenerarJornadas: numeroEquipos >= 2,
+        calculos: {
+          partidosPorEquipo: this.calcularPartidosPorEquipo(numeroEquipos, liga.vueltas),
+          partidosTotales: this.calcularPartidosTotales(numeroEquipos, liga.vueltas),
+          jornadas: this.calcularJornadas(numeroEquipos, liga.vueltas),
+          partidosPorJornada: this.calcularPartidosPorJornada(numeroEquipos)
+        }
+      };
+    });
+
+    return {
+      liga: {
+        id: liga.id,
+        nombre: liga.nombre,
+        numeroGrupos: liga.numeroGrupos,
+        vueltas: liga.vueltas,
+        status: liga.status
+      },
+      totalEquipos: equipos.length,
+      equiposAsignados: equipos.filter(e => e.grupoNumero && e.grupoNumero > 0).length,
+      equiposSinAsignar: equiposSinGrupo.length,
+      grupos,
+      equiposSinGrupo,
+      resumen: {
+        gruposConfigurados: grupos.length,
+        gruposListosParaJornadas: grupos.filter(g => g.puedeGenerarJornadas).length,
+        totalCalculos: {
+          partidosTotalesLiga: grupos.reduce((total, grupo) => total + grupo.calculos.partidosTotales, 0),
+          jornadasMaximas: Math.max(...grupos.map(g => g.calculos.jornadas), 0)
+        }
+      }
+    };
   }
 }

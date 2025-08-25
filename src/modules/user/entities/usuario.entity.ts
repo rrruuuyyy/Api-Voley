@@ -9,10 +9,10 @@ export class Usuario {
     @Column({ type:'varchar', length:'300' })
     nombre: string;
 
-    @Column({ unique: true, type:'varchar', length:150 })
+    @Column({ unique: true, type:'varchar', length:150, nullable: true })
     correo: string;
 
-    @Column({ type:'varchar', length:200 })
+    @Column({ type:'varchar', length:200, nullable: true })
     password: string;
 
     @Column({ type:'varchar', length:'6', nullable: true })
@@ -23,6 +23,9 @@ export class Usuario {
 
     @Column({ type:'enum', enum:UserRolesEnum })
     rol: UserRolesEnum;
+
+    @Column({ type:'boolean', default: false })
+    esUsuarioTemporal: boolean;
 
     @Column({ type:'boolean', default: true })
     active: boolean;
