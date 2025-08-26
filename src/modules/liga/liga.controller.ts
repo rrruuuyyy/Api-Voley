@@ -108,4 +108,11 @@ export class LigaController {
   getEstadoGeneral(@Param('id') id: string) {
     return this.partidoService.getEstadoGeneralDetallado(+id);
   }
+
+  @Get(':id/estado-partidos-equipos')
+  @Roles(UserRolesEnum.ADMINISTRADOR, UserRolesEnum.ADMIN_LIGA, UserRolesEnum.CAPITAN)
+  getEstadoPartidosPorEquipoYVuelta(@Param('id') id: string, @Query('equipoId') equipoId?: string) {
+    const equipoIdNum = equipoId ? +equipoId : undefined;
+    return this.partidoService.getEstadoPartidosPorEquipoYVuelta(+id, equipoIdNum);
+  }
 }

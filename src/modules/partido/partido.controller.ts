@@ -37,6 +37,15 @@ export class PartidoController {
     return this.partidoService.findByLiga(+ligaId, jornada ? +jornada : undefined);
   }
 
+  @Get('liga/:ligaId/vuelta/:numeroVuelta')
+  findByLigaYVuelta(
+    @Param('ligaId') ligaId: string,
+    @Param('numeroVuelta') numeroVuelta: string,
+    @Query('status') status?: string
+  ) {
+    return this.partidoService.findByLigaYVuelta(+ligaId, +numeroVuelta, status);
+  }
+
   @Get('tabla/:ligaId')
   getTabla(
     @Param('ligaId') ligaId: string,

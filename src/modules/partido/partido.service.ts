@@ -1,6 +1,6 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { CreatePartidoDto } from './dto/create-partido.dto';
 import { RegistrarResultadoDto } from './dto/registrar-resultado.dto';
 import { CreateJornadaPersonalizadaDto } from './dto/create-jornada-personalizada.dto';
@@ -232,6 +232,97 @@ export class PartidoService {
       relations: ['equipoLocal', 'equipoVisitante', 'liga'],
       order: { jornada: 'ASC', id: 'ASC' }
     });
+  }
+
+  async findByLigaYVuelta(ligaId: number, numeroVuelta: number, status?: string) {
+    const liga = await this.ligaRepository.findOne({
+      where: { id: ligaId, active: true }
+    });
+
+    if (!liga) {
+      throw new HttpException('Liga no encontrada', HttpStatus.NOT_FOUND);
+    }
+
+    if (numeroVuelta < 1 || numeroVuelta > liga.vueltas) {
+      throw new HttpException(`Vuelta ${numeroVuelta} no válida. La liga tiene ${liga.vueltas} vueltas`, HttpStatus.BAD_REQUEST);
+    }
+
+    const whereCondition: any = { 
+      liga: { id: ligaId }, 
+      vuelta: numeroVuelta 
+    };
+
+    // Filtrar por status si se especifica
+    if (status) {
+      const validStatuses = Object.values(PartidoStatusEnum);
+      if (!validStatuses.includes(status as PartidoStatusEnum)) {
+        throw new HttpException(`Status no válido. Valores permitidos: ${validStatuses.join(', ')}`, HttpStatus.BAD_REQUEST);
+      }
+      whereCondition.status = status;
+    }
+
+    const partidos = await this.partidoRepository.find({
+      where: whereCondition,
+      relations: ['equipoLocal', 'equipoVisitante', 'liga', 'jornadaPersonalizada'],
+      order: { jornada: 'ASC', fechaHora: 'ASC', id: 'ASC' }
+    });
+
+    // Calcular estadísticas de la vuelta
+    const equipos = await this.equipoRepository.find({
+      where: { liga: { id: ligaId }, active: true }
+    });
+    const numeroEquipos = equipos.length;
+    const partidosQueDeberianExistir = (numeroEquipos * (numeroEquipos - 1)) / 2;
+
+    const completados = partidos.filter(p => p.status === PartidoStatusEnum.FINALIZADO);
+    const pendientes = partidos.filter(p => p.status === PartidoStatusEnum.PROGRAMADO);
+    const enCurso = partidos.filter(p => p.status === PartidoStatusEnum.EN_CURSO);
+
+    return {
+      liga: {
+        id: liga.id,
+        nombre: liga.nombre,
+        vueltas: liga.vueltas
+      },
+      vuelta: {
+        numero: numeroVuelta,
+        partidosTotales: partidosQueDeberianExistir,
+        partidosCreados: partidos.length,
+        partidosSinCrear: partidosQueDeberianExistir - partidos.length,
+        completados: completados.length,
+        pendientes: pendientes.length,
+        enCurso: enCurso.length,
+        porcentajeCompletado: partidosQueDeberianExistir > 0 ? 
+          (completados.length / partidosQueDeberianExistir) * 100 : 0
+      },
+      partidos: partidos.map(partido => ({
+        id: partido.id,
+        jornada: partido.jornada,
+        vuelta: partido.vuelta,
+        fechaHora: partido.fechaHora,
+        status: partido.status,
+        equipoLocal: {
+          id: partido.equipoLocal.id,
+          nombre: partido.equipoLocal.nombre
+        },
+        equipoVisitante: {
+          id: partido.equipoVisitante.id,
+          nombre: partido.equipoVisitante.nombre
+        },
+        resultado: partido.status === PartidoStatusEnum.FINALIZADO ? {
+          setsLocal: partido.setsEquipoLocal,
+          setsVisitante: partido.setsEquipoVisitante,
+          puntosLocal: partido.puntosEquipoLocal,
+          puntosVisitante: partido.puntosEquipoVisitante,
+          detallesSets: partido.detallesSets
+        } : null,
+        jornadaPersonalizada: partido.jornadaPersonalizada ? {
+          id: partido.jornadaPersonalizada.id,
+          nombre: partido.jornadaPersonalizada.nombre
+        } : null,
+        observaciones: partido.observaciones
+      }))
+    };
   }
 
   async findOne(id: number) {
@@ -753,6 +844,10 @@ export class PartidoService {
       const completadosVuelta = partidosVuelta.filter(p => p.status === PartidoStatusEnum.FINALIZADO);
       const pendientesVuelta = partidosVuelta.filter(p => p.status === PartidoStatusEnum.PROGRAMADO);
 
+      // 🔧 CALCULAR PARTIDOS QUE DEBERÍAN EXISTIR POR VUELTA (ROUND-ROBIN)
+      const numeroEquipos = equipos.length;
+      const partidosQueDeberianExistir = (numeroEquipos * (numeroEquipos - 1)) / 2;
+
       // Calcular tabla de la vuelta
       const tablaVuelta = await this.calcularTablaVuelta(ligaId, vuelta, equipos);
 
@@ -763,15 +858,17 @@ export class PartidoService {
 
       vueltas.push({
         numero: vuelta,
-        partidosTotales: partidosVuelta.length,
+        partidosTotales: partidosQueDeberianExistir, // 🔧 Usar el cálculo correcto
+        partidosCreados: partidosVuelta.length,      // 🆕 Partidos actualmente creados
         partidosCompletados: completadosVuelta.length,
         partidosPendientes: pendientesVuelta.length,
-        porcentajeCompletado: partidosVuelta.length > 0 ? 
-          (completadosVuelta.length / partidosVuelta.length) * 100 : 0,
+        partidosSinCrear: partidosQueDeberianExistir - partidosVuelta.length, // 🆕 Partidos faltantes por crear
+        porcentajeCompletado: partidosQueDeberianExistir > 0 ? 
+          (completadosVuelta.length / partidosQueDeberianExistir) * 100 : 0, // 🔧 Porcentaje basado en el total correcto
         jornadaActual,
         proximaJornada,
         totalJornadas: jornadasVuelta.length,
-        estado: this.determinarEstadoVuelta(completadosVuelta.length, partidosVuelta.length),
+        estado: this.determinarEstadoVuelta(completadosVuelta.length, partidosQueDeberianExistir), // 🔧 Estado basado en el total correcto
         tabla: tablaVuelta,
         proximosPartidos: pendientesVuelta
           .slice(0, 5)
@@ -797,9 +894,35 @@ export class PartidoService {
         const estadisticasPorVuelta: any[] = [];
         for (let vuelta = 1; vuelta <= liga.vueltas; vuelta++) {
           const statsVuelta = await this.getEstadisticasEquipoVuelta(equipo.id, vuelta);
+          
+          // Calcular partidos que debe jugar por vuelta (round-robin)
+          const totalEquiposEnGrupo = equipos.filter(e => e.grupoNumero === equipo.grupoNumero).length;
+          const partidosQueDebeJugarPorVuelta = totalEquiposEnGrupo - 1; // En round-robin cada equipo juega contra todos los demás
+
+          // Calcular partidos pendientes específicos para esta vuelta
+          const partidosPendientesVuelta = await this.partidoRepository.count({
+            where: [
+              { 
+                equipoLocal: { id: equipo.id }, 
+                vuelta,
+                status: PartidoStatusEnum.PROGRAMADO 
+              },
+              { 
+                equipoVisitante: { id: equipo.id }, 
+                vuelta,
+                status: PartidoStatusEnum.PROGRAMADO 
+              }
+            ]
+          });
+
           estadisticasPorVuelta.push({
             vuelta,
-            ...statsVuelta
+            ...statsVuelta,
+            partidosQueDebeJugar: partidosQueDebeJugarPorVuelta,
+            partidosFaltantes: partidosQueDebeJugarPorVuelta - statsVuelta.partidosJugados,
+            partidosPendientesVuelta: partidosPendientesVuelta,
+            porcentajeCompletadoVuelta: partidosQueDebeJugarPorVuelta > 0 ? 
+              (statsVuelta.partidosJugados / partidosQueDebeJugarPorVuelta) * 100 : 0
           });
         }
 
@@ -859,11 +982,13 @@ export class PartidoService {
       },
       resumenGeneral: {
         equiposTotal: equipos.length,
-        partidosTotales: todosPartidos.length,
+        partidosTotalesCreados: todosPartidos.length, // 🆕 Partidos actualmente en BD
+        partidosTotalesQueDeberianExistir: ((equipos.length * (equipos.length - 1)) / 2) * liga.vueltas, // 🔧 Total correcto
         partidosCompletados: partidosCompletados.length,
         partidosPendientes: partidosPendientes.length,
-        porcentajeCompletado: todosPartidos.length > 0 ? 
-          (partidosCompletados.length / todosPartidos.length) * 100 : 0,
+        partidosSinCrear: (((equipos.length * (equipos.length - 1)) / 2) * liga.vueltas) - todosPartidos.length, // 🆕 Faltantes por crear
+        porcentajeCompletado: (((equipos.length * (equipos.length - 1)) / 2) * liga.vueltas) > 0 ? 
+          (partidosCompletados.length / (((equipos.length * (equipos.length - 1)) / 2) * liga.vueltas)) * 100 : 0, // 🔧 Porcentaje correcto
         vueltas: liga.vueltas,
         jornadaActual: Math.max(...partidosCompletados.map(p => p.jornada), 0)
       },
@@ -1033,6 +1158,166 @@ export class PartidoService {
     return 'en_curso';
   }
 
+  // ===== NUEVO ENDPOINT PARA ESTADO DETALLADO POR EQUIPO =====
+
+  async getEstadoPartidosPorEquipoYVuelta(ligaId: number, equipoId?: number) {
+    const liga = await this.ligaRepository.findOne({
+      where: { id: ligaId, active: true }
+    });
+
+    if (!liga) {
+      throw new HttpException('Liga no encontrada', HttpStatus.NOT_FOUND);
+    }
+
+    // Obtener equipos (filtrar por equipo específico si se proporciona)
+    const whereEquipos: any = { liga: { id: ligaId }, active: true };
+    if (equipoId) {
+      whereEquipos.id = equipoId;
+    }
+
+    const equipos = await this.equipoRepository.find({
+      where: whereEquipos,
+      relations: ['capitan']
+    });
+
+    if (equipoId && equipos.length === 0) {
+      throw new HttpException('Equipo no encontrado en esta liga', HttpStatus.NOT_FOUND);
+    }
+
+    const resultado: any[] = [];
+
+    for (const equipo of equipos) {
+      // Calcular total de equipos en el grupo para saber cuántos partidos debe jugar
+      const totalEquiposEnGrupo = await this.equipoRepository.count({
+        where: { 
+          liga: { id: ligaId }, 
+          grupoNumero: equipo.grupoNumero, 
+          active: true 
+        }
+      });
+      const partidosQueDebeJugarPorVuelta = totalEquiposEnGrupo - 1;
+
+      const vueltas: any[] = [];
+      for (let vuelta = 1; vuelta <= liga.vueltas; vuelta++) {
+        // Obtener estadísticas de la vuelta
+        const statsVuelta = await this.getEstadisticasEquipoVuelta(equipo.id, vuelta);
+
+        // Obtener partidos pendientes de esta vuelta
+        const partidosPendientesVuelta = await this.partidoRepository.find({
+          where: [
+            { 
+              equipoLocal: { id: equipo.id }, 
+              vuelta,
+              status: PartidoStatusEnum.PROGRAMADO 
+            },
+            { 
+              equipoVisitante: { id: equipo.id }, 
+              vuelta,
+              status: PartidoStatusEnum.PROGRAMADO 
+            }
+          ],
+          relations: ['equipoLocal', 'equipoVisitante'],
+          order: { jornada: 'ASC', fechaHora: 'ASC' }
+        });
+
+        // Obtener próximos rivales que le faltan por enfrentar en esta vuelta
+        const rivalesTotales = await this.equipoRepository.find({
+          where: { 
+            liga: { id: ligaId }, 
+            grupoNumero: equipo.grupoNumero, 
+            active: true,
+            id: Not(equipo.id) // Excluir el mismo equipo
+          }
+        });
+
+        // Obtener rivales ya enfrentados en esta vuelta
+        const rivalesEnfrentados = await this.partidoRepository.find({
+          where: [
+            { 
+              equipoLocal: { id: equipo.id }, 
+              vuelta,
+              status: PartidoStatusEnum.FINALIZADO 
+            },
+            { 
+              equipoVisitante: { id: equipo.id }, 
+              vuelta,
+              status: PartidoStatusEnum.FINALIZADO 
+            }
+          ],
+          relations: ['equipoLocal', 'equipoVisitante']
+        });
+
+        const idsRivalesEnfrentados = new Set();
+        rivalesEnfrentados.forEach(partido => {
+          const rivalId = partido.equipoLocal.id === equipo.id ? 
+            partido.equipoVisitante.id : partido.equipoLocal.id;
+          idsRivalesEnfrentados.add(rivalId);
+        });
+
+        // Calcular rivales pendientes
+        const rivalesPendientes = rivalesTotales.filter(rival => 
+          !idsRivalesEnfrentados.has(rival.id)
+        );
+
+        vueltas.push({
+          numero: vuelta,
+          partidosQueDebeJugar: partidosQueDebeJugarPorVuelta,
+          partidosJugados: statsVuelta.partidosJugados,
+          partidosFaltantes: partidosQueDebeJugarPorVuelta - statsVuelta.partidosJugados,
+          partidosPendientesEnCalendario: partidosPendientesVuelta.length,
+          porcentajeCompletado: partidosQueDebeJugarPorVuelta > 0 ? 
+            (statsVuelta.partidosJugados / partidosQueDebeJugarPorVuelta) * 100 : 0,
+          estadisticas: {
+            partidosGanados: statsVuelta.partidosGanados,
+            partidosPerdidos: statsVuelta.partidosPerdidos,
+            setsAFavor: statsVuelta.setsAFavor,
+            setsEnContra: statsVuelta.setsEnContra,
+            puntosLiga: statsVuelta.puntosLiga
+          },
+          proximosPartidos: partidosPendientesVuelta.map(partido => ({
+            id: partido.id,
+            jornada: partido.jornada,
+            fechaHora: partido.fechaHora,
+            rival: {
+              id: partido.equipoLocal.id === equipo.id ? partido.equipoVisitante.id : partido.equipoLocal.id,
+              nombre: partido.equipoLocal.id === equipo.id ? partido.equipoVisitante.nombre : partido.equipoLocal.nombre
+            },
+            esLocal: partido.equipoLocal.id === equipo.id
+          })),
+          rivalesPendientes: rivalesPendientes.map(rival => ({
+            id: rival.id,
+            nombre: rival.nombre
+          }))
+        });
+      }
+
+      resultado.push({
+        equipo: {
+          id: equipo.id,
+          nombre: equipo.nombre,
+          grupoNumero: equipo.grupoNumero,
+          capitan: {
+            id: equipo.capitan.id,
+            nombre: equipo.capitan.nombre
+          }
+        },
+        vueltas
+      });
+    }
+
+    return {
+      liga: {
+        id: liga.id,
+        nombre: liga.nombre,
+        vueltas: liga.vueltas,
+        numeroGrupos: liga.numeroGrupos
+      },
+      equipos: resultado
+    };
+  }
+
+  // ===== FIN NUEVO ENDPOINT =====
+
   private async detectarVueltaCorrecta(ligaId: number, equipoLocalId: number, equipoVisitanteId: number): Promise<number> {
     const liga = await this.ligaRepository.findOne({
       where: { id: ligaId, active: true }
@@ -1083,6 +1368,13 @@ export class PartidoService {
       throw new HttpException('Liga no encontrada', HttpStatus.NOT_FOUND);
     }
 
+    // 🔧 OBTENER NÚMERO DE EQUIPOS PARA CÁLCULO CORRECTO
+    const equipos = await this.equipoRepository.find({
+      where: { liga: { id: ligaId }, active: true }
+    });
+    const numeroEquipos = equipos.length;
+    const partidosQueDeberianExistirPorVuelta = (numeroEquipos * (numeroEquipos - 1)) / 2;
+
     const vueltas: any[] = [];
     for (let vuelta = 1; vuelta <= liga.vueltas; vuelta++) {
       const partidosVuelta = await this.partidoRepository.find({
@@ -1092,16 +1384,20 @@ export class PartidoService {
       const completados = partidosVuelta.filter(p => p.status === PartidoStatusEnum.FINALIZADO).length;
       const pendientes = partidosVuelta.filter(p => p.status === PartidoStatusEnum.PROGRAMADO).length;
 
-      const porcentaje = partidosVuelta.length > 0 ? (completados / partidosVuelta.length) * 100 : 0;
+      // 🔧 USAR EL CÁLCULO CORRECTO PARA PORCENTAJE
+      const porcentaje = partidosQueDeberianExistirPorVuelta > 0 ? 
+        (completados / partidosQueDeberianExistirPorVuelta) * 100 : 0;
       
       vueltas.push({
         numero: vuelta,
-        totalPartidos: partidosVuelta.length,
+        totalPartidos: partidosQueDeberianExistirPorVuelta, // 🔧 Total correcto según round-robin
+        partidosCreados: partidosVuelta.length,             // 🆕 Partidos actualmente creados
         completados,
         pendientes,
-        porcentajeCompletado: porcentaje,
-        estado: this.determinarEstadoVuelta(completados, partidosVuelta.length),
-        puedeCrearJornada: pendientes > 0 || completados === 0
+        partidosSinCrear: partidosQueDeberianExistirPorVuelta - partidosVuelta.length, // 🆕 Faltantes por crear
+        porcentajeCompletado: porcentaje,                   // 🔧 Porcentaje basado en total correcto
+        estado: this.determinarEstadoVuelta(completados, partidosQueDeberianExistirPorVuelta), // 🔧 Estado basado en total correcto
+        puedeCrearJornada: pendientes > 0 || completados === 0 || partidosVuelta.length < partidosQueDeberianExistirPorVuelta // 🔧 Puede crear si faltan partidos
       });
     }
 
